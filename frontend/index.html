@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Tracker</title>
+<style>
+:root{--bg:#f3f5f2;--ink:#1c2b26;--line:#cfd8d3;--accent:#0f6b52;--card:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#121a17;--ink:#e6eee9;--line:#2c3b35;--accent:#4fc39b;--card:#1a2420}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Georgia,serif}
+main{max-width:640px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.8rem;margin:0 0 16px}
+input,select,button{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+button{background:var(--accent);color:#fff;border:0;cursor:pointer}
+button.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+form{display:grid;gap:8px;margin-bottom:20px}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)}
+.row small{display:block;opacity:.7}
+.hide{display:none}
+#msg{min-height:1.5em;color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+<h1>Job Tracker</h1>
+<p id="msg" role="status"></p>
+
+<form id="auth">
+  <input id="email" type="email" placeholder="Email" required>
+  <input id="pass" type="password" placeholder="Password (8+ characters)" required>
+  <input id="code" class="hide" placeholder="Code from your email">
+  <button type="submit">Log in</button>
+  <button type="button" class="ghost" id="signup">Create account</button>
+</form>
+
+<section id="app" class="hide">
+  <form id="add">
+    <input id="company" placeholder="Company" required>
+    <input id="role" placeholder="Role" required>
+    <select id="status"><option>Saved</option><option>Applied</option><option>Interview</option><option>Offer</option><option>Rejected</option></select>
+    <button type="submit">Add application</button>
+  </form>
+  <div id="list"></div>
+  <p><button class="ghost" id="out">Log out</button></p>
+</section>
+</main>
+<script src="config.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const say = t => $("msg").textContent = t;
+let token = sessionStorage.getItem("token");
+
+// Cognito is called directly over HTTPS, so no SDK is needed.
+async function cognito(target, body) {
+  const r = await fetch(`https://cognito-idp.${CONFIG.region}.amazonaws.com/`, {
+    method: "POST",
+    headers: {"Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService." + target},
+    body: JSON.stringify({ClientId: CONFIG.clientId, ...body})
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.message || "Request failed");
+  return d;
+}
+
+async function api(method, path = "", body) {
+  const r = await fetch(CONFIG.api + "/apps" + path, {
+    method,
+    headers: {Authorization: token, "Content-Type": "application/json"},
+    body: body && JSON.stringify(body)
+  });
+  if (r.status === 401) { logout(); throw new Error("Session expired. Log in again."); }
+  return r.status === 204 ? null : r.json();
+}
+
+async function render() {
+  const items = await api("GET");
+  $("list").innerHTML = items.length ? "" : "<p>No applications yet. Add your first one above.</p>";
+  for (const a of items) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const info = document.createElement("div");
+    info.innerHTML = "<strong></strong><small></small>";
+    info.firstChild.textContent = a.role;
+    info.lastChild.textContent = a.company;
+    const sel = $("status").cloneNode(true);
+    sel.removeAttribute("id");
+    sel.value = a.status;
+    sel.onchange = () => api("PUT", "/" + a.appId, {...a, status: sel.value}).then(() => say("Status updated."));
+    const del = document.createElement("button");
+    del.className = "ghost";
+    del.textContent = "Delete";
+    del.onclick = () => api("DELETE", "/" + a.appId).then(render);
+    row.append(info, sel, del);
+    $("list").append(row);
+  }
+}
+
+function show() {
+  $("auth").classList.toggle("hide", !!token);
+  $("app").classList.toggle("hide", !token);
+  if (token) render().catch(e => say(e.message));
+}
+
+function logout() { token = null; sessionStorage.removeItem("token"); show(); }
+
+$("auth").onsubmit = async e => {
+  e.preventDefault();
+  try {
+    if (!$("code").classList.contains("hide")) {
+      await cognito("ConfirmSignUp", {Username: $("email").value, ConfirmationCode: $("code").value});
+      $("code").classList.add("hide");
+      say("Account confirmed. Log in now.");
+      return;
+    }
+    const d = await cognito("InitiateAuth", {AuthFlow: "USER_PASSWORD_AUTH", AuthParameters: {USERNAME: $("email").value, PASSWORD: $("pass").value}});
+    token = d.AuthenticationResult.IdToken;
+    sessionStorage.setItem("token", token);
+    say("");
+    show();
+  } catch (err) { say(err.message); }
+};
+
+$("signup").onclick = async () => {
+  try {
+    await cognito("SignUp", {Username: $("email").value, Password: $("pass").value});
+    $("code").classList.remove("hide");
+    say("Check your email for a code, enter it, then press Log in.");
+  } catch (err) { say(err.message); }
+};
+
+$("add").onsubmit = async e => {
+  e.preventDefault();
+  await api("POST", "", {company: $("company").value, role: $("role").value, status: $("status").value});
+  e.target.reset();
+  render();
+};
+
+$("out").onclick = logout;
+show();
+</script>
+</body>
+</html>
