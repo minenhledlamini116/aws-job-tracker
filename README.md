@@ -49,7 +49,7 @@ flowchart LR
 
 ## Cost
 
-Every service used here has a free tier or bills per request, so a demo costs close to nothing.
+Deployed briefly on AWS, tested end to end, then removed with `terraform destroy`. Costs depend on usage, so destroy the stack when you're done.
 
 ## Possible improvements
 
@@ -59,6 +59,8 @@ Every service used here has a free tier or bills per request, so a demo costs cl
 - Unit tests for the Lambda using moto
 
 ## Screenshots
+
+Deployed and tested on AWS in the Ireland region (eu-west-1), then torn down to avoid ongoing costs.
 
 ![Login page](picture%201.png)
 ![Tracker](Picture%202.png)
