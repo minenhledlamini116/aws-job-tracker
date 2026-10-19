@@ -60,6 +60,6 @@ Every service used here has a free tier or bills per request, so a demo costs cl
 
 ## Screenshots
 
-![Login page](picture1.png)
-![Tracker](picture3.png)
-![Terraform apply](picture2.png)
+![Login page](picture%201.png)
+![Tracker](Picture%202.png)
+![Terraform apply](Picture%203.png)
